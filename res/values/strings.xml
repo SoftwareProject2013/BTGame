@@ -4,5 +4,18 @@
     <string name="app_name">BlootothGame</string>
     <string name="action_settings">Settings</string>
     <string name="hello_world">Hello world!</string>
+    <string name="Player1">Player 1</string>
+    <string name="Player2">Player 2</string>
+    <string name="Buttonstart">start</string>
+    <string name="buttonConnect">Connect</string>
+    <string name="connectionString">Click connect</string>
+    <string name="connectionWait">Waiting for opponent connection</string>
+    <string name="Player1Win">You win</string>
+    <string name="Player2Win">You loose</string>
+    <string name="opponentReady">Click start to run game</string>
+    <string name="PlayerRedy">Click start and wait for opponent</string>
+    <string name="play">game in progress</string>
+    <string name="Player1WinDBMSG">You won against </string>
+    <string name="Player1LooseDBMSG">You loose against  </string>
 
 </resources>

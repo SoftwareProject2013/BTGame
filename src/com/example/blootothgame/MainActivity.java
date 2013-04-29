@@ -1,12 +1,12 @@
 package com.example.blootothgame;
 
-import java.io.IOException;
 import java.util.UUID;
 
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
+import android.database.Cursor;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -19,10 +19,15 @@ import android.view.Menu;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
+import android.widget.ListView;
 import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.example.blootothgame.R.string;
+
 public class MainActivity extends Activity implements SensorEventListener{
+	
 
 	private SensorManager sensorManager;
 	double sum, oldsum;
@@ -40,25 +45,43 @@ public class MainActivity extends Activity implements SensorEventListener{
 	private int player2Progress;
 	SeekBar player1SeekBar;
 	SeekBar player2SeekBar;
-	byte i = 0;
 	BTServer btServer;
 	BTClient btClient;
 	boolean isServer;
 	Button btStart;
 	boolean start;
 	boolean opponentRedy;
+	boolean playerRedy;
 	boolean connected;
 	boolean endGame;
+	TextView textGameState;
+	MyDataBase db;
+	DataBaseAdapter adapter;
+	ListView scoresList;
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+		playerRedy=false;
+		opponentRedy=false;
 		player1Progress=0;
 		player2Progress=0;
 		player1SeekBar = (SeekBar)findViewById(R.id.seekBar1);
 		player2SeekBar = (SeekBar)findViewById(R.id.seekBar2);
+		TextView textGameState = (TextView) findViewById(R.id.textGameState);
+		textGameState.setText(string.connectionString);
+		scoresList = (ListView) findViewById(R.id.scoreList);
 		try
 		{
+			db = new MyDataBase(getApplicationContext());
+			db.openToWrite();
+			db.insert(mMAC,1);
+			db.close();
+			db.openToRead();
+			Cursor cursor = db.getAllRecords();
+			startManagingCursor(cursor);
+			adapter = new DataBaseAdapter(this, cursor);
+			scoresList.setAdapter(adapter);
 			sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 			sensorManager.registerListener(this, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_NORMAL);
 			sensivity = 12;
@@ -66,10 +89,6 @@ public class MainActivity extends Activity implements SensorEventListener{
 			if(mBluetoothAdapter == null)
 			{
 				throw(new Exception("bluetooth not supported"));				
-			}
-			if(!mBluetoothAdapter.isEnabled())
-			{
-				throw(new Exception("bluetooth is ont enabled"));
 			}
 			if(mBluetoothAdapter.isEnabled())
 			{
@@ -80,7 +99,6 @@ public class MainActivity extends Activity implements SensorEventListener{
 				Toast.makeText(getApplicationContext(), "Bluetooth not enabled you can't play", Toast.LENGTH_LONG).show();
 			}
 			mUUID = UUID.fromString(UUIDString);
-			btStart = (Button)findViewById(R.id.button1);
 			if(mMAC.equals(mBluetoothAdapter.getAddress().toString()))
 			{
 				isServer = true;
@@ -97,6 +115,7 @@ public class MainActivity extends Activity implements SensorEventListener{
 			Log.d(TAG, ex.toString());
 			finish();
 		}
+		btStart = (Button)findViewById(R.id.btStart);
 		btStart.setOnClickListener(new OnClickListener() {
 
 			@Override
@@ -130,47 +149,42 @@ public class MainActivity extends Activity implements SensorEventListener{
 			
 			
 		});
+		//button to connect
 		((Button)findViewById(R.id.button2)).setOnClickListener(new OnClickListener() {
 			
 			@Override
-			public void onClick(View arg0) 
+			public void onClick(View button) 
 			{
-				Toast.makeText(getBaseContext(), "wait for connection", Toast.LENGTH_LONG);
+				button.setEnabled(false);
+				((TextView)findViewById(R.id.textGameState)).setText(string.connectionWait);
 				try
 				{
 					if(isServer == true)
 					{
-						if(btServer == null)
-						{
-							
-						
-							isServer = true;
-							btServer = new BTServer(mUUID, mBluetoothAdapter, mHandler);
-							btServer.start();
-						}
-						
+						btServer = new BTServer(mUUID, mBluetoothAdapter, mHandler);
+						btServer.start();
 					}
 					else
 					{
-						if(btClient == null)
-						{
-							BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(mMAC);
-							btClient = new BTClient(device, mUUID, mBluetoothAdapter,mHandler);
-							isServer = false;
-							btClient.start();
-						}
-						
+						BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(mMAC);
+						btClient = new BTClient(device, mUUID, mBluetoothAdapter,mHandler);
+						btClient.start();
+	
 					}
 					
 				}catch(Exception e)
 				{
-					Toast.makeText(getApplicationContext(), "cannot set connection " + e, Toast.LENGTH_LONG);
-				}
-				
-				Toast.makeText(getApplicationContext(), "connected", Toast.LENGTH_SHORT);
-				
+					Toast.makeText(getApplicationContext(), "cannot set connection " + e, Toast.LENGTH_LONG).show();
+				}		
 			}
 		});
+	}
+
+	@Override
+	protected void onResume() {
+		super.onResume();
+		((Button)findViewById(R.id.button2)).setEnabled(true);
+		((TextView)findViewById(R.id.textGameState)).setText(string.connectionString);
 	}
 
 	@Override
@@ -201,7 +215,43 @@ public class MainActivity extends Activity implements SensorEventListener{
 		if (btServer != null) { btServer.cancel(); btServer = null; }
 		super.onDestroy();
 	}
-
+	
+	 private void checkResults() 
+		{
+			
+			if(player1Progress > 95 || player2Progress > 95)
+			{
+				endGame = true;
+				start = false;
+				if(isServer == true)
+				{
+					//btServer.write("1001".getBytes());
+					btServer.write("0".getBytes());
+				}
+				else
+				{
+					//btClient.write("1001".getBytes());
+					btClient.write("0".getBytes());
+				}
+				opponentRedy = false;
+				Log.d(TAG,"end game");
+			}
+			if(player1Progress >= 90)
+			{
+				Toast.makeText(getApplicationContext(), "You win", Toast.LENGTH_LONG).show();
+				textGameState.setText(string.Player1Win);
+				Log.d(TAG,"player 1 win");
+			}
+			if(player2Progress >= 90)
+			{
+				Toast.makeText(getApplicationContext(), "You win", Toast.LENGTH_LONG).show();
+				textGameState.setText(string.Player2Win);
+				Log.d(TAG,"player 2 win");
+				
+			}			
+		}
+ 
+	
 	@Override
 	public void onSensorChanged(SensorEvent event) {
 		if(event.sensor.getType() == Sensor.TYPE_ACCELEROMETER)
@@ -235,80 +285,43 @@ public class MainActivity extends Activity implements SensorEventListener{
 		
 	}
 
-	private void checkResults() {
-		if(player1Progress >= 100)
-		{
-			Toast.makeText(getApplicationContext(), "You win", Toast.LENGTH_LONG);
-			start = false;
-		}
-		if(player2Progress >= 100)
-		{
-			Toast.makeText(getApplicationContext(), "You win", Toast.LENGTH_LONG);
-			start = false;
-		}			
-	}
-	private final Handler mHandler = new Handler() {
+	private final Handler mHandler = new Handler() 
+	{
         @Override
-        public void handleMessage(Message msg) {
-            switch (msg.what) {
-            case MESSAGE_READ:
-                byte[] readBuf = (byte[]) msg.obj;
+        public void handleMessage(Message msg) 
+        {
+                 byte[] readBuf = (byte[]) msg.obj;
                 // construct a string from the valid bytes in the buffer
                 String readMessage = new String(readBuf, 0, msg.arg1);
                 Log.d("Handler ", "Message " + readMessage);
                 if(Integer.parseInt(readMessage) == 1000)
                 {
+                	if(start == false)
+                	{
+                		textGameState.setText(string.opponentReady);
+                	}
+                	else
+                	{
+                		textGameState.setText(string.play);
+                	}
                 	opponentRedy = true;
                 }
                 if(Integer.parseInt(readMessage) == 1001)
                 {
                 	opponentRedy = false;
                 	start = false;
-
+                	checkResults();
                 }
                 else if(Integer.parseInt(readMessage) < 200)
                 {
 	                player2Progress = Integer.parseInt(readMessage);
 	                player2SeekBar.setProgress(player2Progress);
 	                checkResults();
-	                break;
-                }
-        
-            }
+	              
+                }        
         }
-
-		private void checkResults() {
-			
-			if(player1Progress > 95 || player2Progress > 95)
-			{
-				endGame = true;
-				start = false;
-				if(isServer == true)
-				{
-					//btServer.write("1001".getBytes());
-					btServer.write("0".getBytes());
-				}
-				else
-				{
-					//btClient.write("1001".getBytes());
-					btClient.write("0".getBytes());
-				}
-				opponentRedy = false;
-				Log.d(TAG,"end game");
-			}
-			if(player1Progress >= 90)
-			{
-				Toast.makeText(getApplicationContext(), "You win", Toast.LENGTH_LONG);
-				Log.d(TAG,"player 1 win");
-			}
-			if(player2Progress >= 90)
-			{
-				Toast.makeText(getApplicationContext(), "You win", Toast.LENGTH_LONG);
-				Log.d(TAG,"player 2 win");
-				
-			}			
-		}
-    };
+        
+	};
+};
 
 
-}
